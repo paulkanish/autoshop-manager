@@ -1,0 +1,220 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==========================================
+// ENUMS
+// ==========================================
+
+enum Role {
+  ADMIN
+  MECHANIC
+  OWNER
+}
+
+enum JobStatus {
+  SCHEDULED
+  IN_PROGRESS
+  WAITING_ON_PARTS
+  COMPLETED
+  ON_HOLD
+  CANCELLED
+  DECLINED_ESTIMATE
+}
+
+enum Priority {
+  ROUTINE
+  HIGH
+  CRITICAL
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  UNPAID
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  CHECK
+  OTHER
+}
+
+// ==========================================
+// MODELS
+// ==========================================
+
+model User {
+  id           String        @id @default(cuid())
+  name         String
+  email        String        @unique
+  passwordHash String        
+  role         Role          @default(MECHANIC)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  deletedAt    DateTime?     
+
+  assignedAppointments  Appointment[]
+  statusChanges         StatusHistory[]
+  authoredNotes         Note[]
+  passwordResets        PasswordReset[]
+}
+
+model Customer {
+  id        String        @id @default(cuid())
+  firstName String
+  lastName  String
+  phone     String        @unique 
+  email     String?
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  deletedAt DateTime?     
+
+  vehicles Vehicle[]
+  appointments Appointment[]
+}
+
+model Vehicle {
+  id             String        @id @default(cuid())
+  registration   String        @unique 
+  vin            String?       @unique 
+  make           String
+  model          String
+  year           Int?
+  mileage        Int?          
+  customerId     String
+  customer       Customer      @relation(fields: [customerId], references: [id])
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  deletedAt      DateTime?     
+
+  appointments   Appointment[]
+
+  @@index([registration])
+  @@index([customerId])
+}
+
+model Appointment {
+  id                  String        @id @default(cuid())
+  customerId          String
+  customer            Customer      @relation(fields: [customerId], references: [id])
+  vehicleId           String
+  vehicle             Vehicle       @relation(fields: [vehicleId], references: [id])
+  mechanicId          String?       
+  mechanic            User?         @relation(fields: [mechanicId], references: [id])
+  
+  scheduledDateTime   DateTime?     
+  requestedService    String        
+  estimatedDuration   String?       
+  
+  status              JobStatus     @default(SCHEDULED)
+  priority            Priority      @default(ROUTINE)
+  
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+  deletedAt           DateTime?     
+
+  serviceRecord       ServiceRecord?
+  statusHistory       StatusHistory[]
+  notes               Note[]
+  
+  @@index([mechanicId])
+  @@index([vehicleId])
+  @@index([status])
+  @@index([scheduledDateTime])
+}
+
+model ServiceRecord {
+  id             String    @id @default(cuid())
+  appointmentId  String    @unique
+  appointment    Appointment @relation(fields: [appointmentId], references: [id])
+  mechanicId     String?
+  
+  laborHours     Float     @default(0)
+  laborRate      Float     @default(0) 
+  totalCost      Float     @default(0) 
+  
+  notes          String?   
+  completedAt    DateTime? 
+  
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  partsUsed      PartLog[]
+  invoice        Invoice?
+}
+
+model PartLog {
+  id              String        @id @default(cuid())
+  serviceRecordId String
+  serviceRecord   ServiceRecord @relation(fields: [serviceRecordId], references: [id])
+  
+  partName        String        
+  quantity        Int           @default(1)
+  unitCost        Float         @default(0)
+  
+  createdAt       DateTime      @default(now())
+
+  @@index([serviceRecordId])
+}
+
+model Invoice {
+  id              String        @id @default(cuid())
+  serviceRecordId String        @unique
+  serviceRecord   ServiceRecord @relation(fields: [serviceRecordId], references: [id])
+  
+  invoiceNumber   String        @unique 
+  totalAmount     Float         @default(0)
+  
+  paymentStatus   PaymentStatus @default(PENDING)
+  paymentMethod   PaymentMethod?
+  paymentDate     DateTime?
+  
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  deletedAt       DateTime?     
+
+  @@index([paymentStatus])
+}
+
+model StatusHistory {
+  id            String    @id @default(cuid())
+  appointmentId String
+  appointment   Appointment @relation(fields: [appointmentId], references: [id])
+  
+  oldStatus     JobStatus
+  newStatus     JobStatus
+  changedById   String
+  changedBy     User      @relation(fields: [changedById], references: [id])
+  changedAt     DateTime  @default(now())
+
+  @@index([appointmentId])
+}
+
+model Note {
+  id            String    @id @default(cuid())
+  appointmentId String
+  appointment   Appointment @relation(fields: [appointmentId], references: [id])
+  
+  authorId      String
+  author        User      @relation(fields: [authorId], references: [id])
+  
+  text          String    
+  createdAt     DateTime  @default(now())
+
+  @@index([appointmentId])
+}
+
+model PasswordReset {
+  id            String    @id @default(cuid())
+  token         String    @unique
+  expiresAT     DateTime
+  userId        String
+  user          User      @relation(fields:[userId],references: [id], onDelete: Cascade)
+}
