@@ -1,26 +1,34 @@
-import { auth } from "@/lib/auth";
 import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
+import { getToken } from "next-auth/jwt";
 
-export default auth((req) => {
-  const isLoggedIn = !!req.auth;
-  const isApiRoute = req.nextUrl.pathname.startsWith("/api");
-  const isAuthPage = req.nextUrl.pathname.startsWith("/login");
+export async function middleware(req: NextRequest) {
+  // 1. Lightweight token check (does NOT import heavy Prisma/Auth config)
+  const token = await getToken({ 
+    req, 
+    secret: process.env.NEXTAUTH_SECRET 
+  });
 
-  // 1. If it's an API route, let it pass through. 
-  // The API route itself will check auth and return a 401 JSON if needed.
-  if (isApiRoute) {
-    return NextResponse.next();
-  }
+  const isLoggedIn = !!token;
 
-  // 2. If not logged in and not on the login page, redirect to login
-  if (!isLoggedIn && !isAuthPage) {
-    return NextResponse.redirect(new URL("/login", req.nextUrl));
+  // 2. If not logged in, redirect to login page
+  if (!isLoggedIn) {
+    const loginUrl = new URL("/login", req.nextUrl);
+    // Optional: remember where they were trying to go
+    loginUrl.searchParams.set("callbackUrl", req.nextUrl.pathname);
+    return NextResponse.redirect(loginUrl);
   }
 
   return NextResponse.next();
-});
+}
 
-// 3. Configure the middleware to run on all paths except static assets
+// 3. STRICT Matcher: Only run middleware on protected routes.
+// This drastically reduces the Edge Function bundle size.
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  matcher: [
+    "/admin/:path*",
+    "/mechanic/:path*",
+    "/owner/:path*",
+    "/dashboard/:path*",
+  ],
 };
