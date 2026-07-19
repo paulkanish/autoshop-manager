@@ -33,11 +33,11 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         if (!isPasswordValid) return null;
 
         // Return user object (this gets stored in the JWT)
-        return { 
-          id: user.id, 
-          email: user.email, 
-          name: user.name, 
-          role: user.role 
+        return {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          role: user.role
         };
       },
     }),
@@ -47,7 +47,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       // Add role and id to the token on initial sign in
       if (user) {
         token.role = user.role;
-        token.id = user.id;
+        token.id = user.id ||;
       }
       return token;
     },
