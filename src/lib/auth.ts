@@ -3,9 +3,16 @@ import Credentials from "next-auth/providers/credentials";
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 
-// Note: In a production app, you would import a shared Prisma client 
-// to avoid connection pool limits, but this is fine for local development.
-const prisma = new PrismaClient();
+// Prevent multiple instances of Prisma Client in serverless environments (Vercel)
+const globalForPrisma = globalThis as unknown as {
+  prisma: PrismaClient | undefined;
+};
+
+export const prisma = globalForPrisma.prisma ?? new PrismaClient();
+
+if (process.env.NODE_ENV !== "production") {
+  globalForPrisma.prisma = prisma;
+}
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   providers: [
@@ -23,28 +30,31 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           where: { email: credentials.email as string },
         });
 
-        if (!user) return null;
+        if (!user) {
+          return null; // User not found
+        }
 
         const isPasswordValid = await bcrypt.compare(
           credentials.password as string,
           user.passwordHash
         );
 
-        if (!isPasswordValid) return null;
+        if (!isPasswordValid) {
+          return null; // Password doesn't match
+        }
 
         // Return user object (this gets stored in the JWT)
         return {
           id: user.id,
           email: user.email,
           name: user.name,
-          role: user.role
+          role: user.role,
         };
       },
     }),
   ],
   callbacks: {
     async jwt({ token, user }) {
-      // Add role and id to the token on initial sign in
       if (user && user.id) {
         token.id = user.id;
         token.role = user.role;
@@ -52,7 +62,6 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       return token;
     },
     async session({ session, token }) {
-      // Add role and id to the session object so we can use it in the UI
       if (session.user) {
         (session.user as any).role = token.role;
         (session.user as any).id = token.id;
@@ -61,6 +70,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     },
   },
   pages: {
-    signIn: "/login", // Redirect to our custom login page
+    signIn: "/login",
   },
+  secret: process.env.NEXTAUTH_SECRET, // Explicitly tell NextAuth to use this
 });
