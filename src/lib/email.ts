@@ -13,8 +13,15 @@ const transporter = nodemailer.createTransport({
 
 // 2. Function to send the password reset email
 export async function sendPasswordResetEmail(email: string, resetToken: string) {
+  // Safely resolve the base URL across environments and sanitize trailing slashes
+  const baseUrl = (
+    process.env.NEXT_PUBLIC_APP_URL || 
+    process.env.NEXTAUTH_URL || 
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
+  ).replace(/\/$/, '');
+
   // Construct the reset URL using the token
-  const resetUrl = `${process.env.NEXT_PUBLIC_APP_URL}/reset-password?token=${resetToken}`;
+  const resetUrl = `${baseUrl}/reset-password?token=${resetToken}`;
 
   const mailOptions = {
     from: `"AutoShop Manager" <${process.env.SMTP_USER}>`, // Sender address
@@ -26,7 +33,7 @@ export async function sendPasswordResetEmail(email: string, resetToken: string) 
         <p>Hello,</p>
         <p>We received a request to reset the password for your AutoShop Manager account.</p>
         <p>Click the button below to choose a new password. This link will expire in <strong>1 hour</strong>.</p>
-        
+
         <div style="text-align: center; margin: 30px 0;">
           <a href="${resetUrl}" style="background-color: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; font-weight: bold;">
             Reset Password
