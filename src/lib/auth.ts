@@ -3,6 +3,13 @@ import Credentials from "next-auth/providers/credentials";
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 
+// Ensure process.env.NEXTAUTH_URL is always a valid, parseable URL during static prerendering
+if (!process.env.NEXTAUTH_URL || process.env.NEXTAUTH_URL.includes('[REDACTED]')) {
+  process.env.NEXTAUTH_URL = process.env.VERCEL_URL 
+    ? `https://${process.env.VERCEL_URL}` 
+    : 'http://localhost:3000';
+}
+
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
@@ -14,6 +21,7 @@ if (process.env.NODE_ENV !== "production") {
 }
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
+  trustHost: true,
   providers: [
     Credentials({
       credentials: {
@@ -75,7 +83,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     async jwt({ token, user }) {
       if (user && user.id) {
         token.id = user.id;
-        token.role = user.role;
+        token.role = (user as any).role;
       }
       return token;
     },
