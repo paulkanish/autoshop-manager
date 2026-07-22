@@ -1,11 +1,13 @@
-import { auth } from "@/lib/auth";
+import NextAuth from "next-auth";
 import { NextResponse } from "next/server";
+import { authConfig } from "@/lib/auth.config";
+
+const { auth } = NextAuth(authConfig);
 
 export default auth((req) => {
   const isLoggedIn = !!req.auth;
 
   if (!isLoggedIn) {
-    // Clone req.nextUrl to safely modify properties without instantiating new URL(string)
     const loginUrl = req.nextUrl.clone();
     loginUrl.pathname = "/login";
     loginUrl.searchParams.set("callbackUrl", req.nextUrl.pathname);
@@ -15,8 +17,6 @@ export default auth((req) => {
   return NextResponse.next();
 });
 
-// STRICT Matcher: Only run middleware on protected routes.
-// This drastically reduces the Edge Function bundle size.
 export const config = {
   matcher: [
     "/admin/:path*",
