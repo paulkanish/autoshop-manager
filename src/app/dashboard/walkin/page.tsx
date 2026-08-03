@@ -29,9 +29,12 @@ export default function WalkInPage() {
     mechanicId: '',
   });
 
+  // Vehicle lookup state
+  const [lookupStatus, setLookupStatus] = useState<'idle' | 'checking' | 'found' | 'not-found'>('idle');
+
   useEffect(() => {
     if (status === 'unauthenticated') router.push('/login');
-    
+
     // Fetch mechanics for the dropdown
     if (status === 'authenticated') {
       fetch('/api/mechanics')
@@ -44,6 +47,44 @@ export default function WalkInPage() {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleRegistrationBlur = async () => {
+    const registration = formData.registration.trim();
+    if (!registration) {
+      setLookupStatus('idle');
+      return;
+    }
+
+    setLookupStatus('checking');
+    try {
+      const res = await fetch(`/api/vehicles/lookup?registration=${encodeURIComponent(registration)}`);
+      if (!res.ok) {
+        setLookupStatus('idle');
+        return;
+      }
+      const data = await res.json();
+
+      if (data.vehicle) {
+        // Auto-fill customer + vehicle fields. Issue Description is
+        // deliberately left untouched — it's specific to this visit,
+        // not to the vehicle or customer record.
+        setFormData((prev) => ({
+          ...prev,
+          firstName: data.vehicle.customer.firstName,
+          lastName: data.vehicle.customer.lastName,
+          phone: data.vehicle.customer.phone,
+          make: data.vehicle.make,
+          model: data.vehicle.model,
+        }));
+        setLookupStatus('found');
+      } else {
+        setLookupStatus('not-found');
+      }
+    } catch (err) {
+      console.error('Vehicle lookup failed:', err);
+      setLookupStatus('idle');
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -94,7 +135,34 @@ export default function WalkInPage() {
         )}
 
         <form onSubmit={handleSubmit} className="bg-gray-800 rounded-xl p-6 border border-gray-700 space-y-6">
-          
+
+          {/* Vehicle Lookup — first, so staff can pull up returning customers immediately */}
+          <div>
+            <h2 className="text-xl font-semibold mb-4 text-gray-300 border-b border-gray-700 pb-2">Vehicle Lookup</h2>
+            <div>
+              <label className="block text-sm font-medium text-gray-400 mb-1">Registration / Plate *</label>
+              <input
+                name="registration"
+                required
+                value={formData.registration}
+                onChange={handleChange}
+                onBlur={handleRegistrationBlur}
+                placeholder="e.g., ABC-123"
+                className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-red-600 focus:outline-none"
+                autoFocus
+              />
+              {lookupStatus === 'checking' && (
+                <p className="text-xs text-gray-400 mt-1">Checking for existing vehicle…</p>
+              )}
+              {lookupStatus === 'found' && (
+                <p className="text-xs text-green-400 mt-1">Existing customer found — fields auto-filled below. Review before submitting.</p>
+              )}
+              {lookupStatus === 'not-found' && (
+                <p className="text-xs text-gray-400 mt-1">No existing record — enter details below.</p>
+              )}
+            </div>
+          </div>
+
           {/* Customer Info */}
           <div>
             <h2 className="text-xl font-semibold mb-4 text-gray-300 border-b border-gray-700 pb-2">Customer Information</h2>
@@ -117,11 +185,7 @@ export default function WalkInPage() {
           {/* Vehicle Info */}
           <div>
             <h2 className="text-xl font-semibold mb-4 text-gray-300 border-b border-gray-700 pb-2">Vehicle Information</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-400 mb-1">Registration / Plate *</label>
-                <input name="registration" required value={formData.registration} onChange={handleChange} placeholder="e.g., ABC-123" className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-red-600 focus:outline-none" />
-              </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-400 mb-1">Make *</label>
                 <input name="make" required value={formData.make} onChange={handleChange} placeholder="e.g., Toyota" className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-red-600 focus:outline-none" />
@@ -165,8 +229,8 @@ export default function WalkInPage() {
             <button type="button" onClick={() => router.push('/dashboard')} className="px-6 py-3 bg-gray-700 hover:bg-gray-600 text-white rounded-lg font-semibold transition">
               Cancel
             </button>
-            <button 
-              type="submit" 
+            <button
+              type="submit"
               disabled={loading}
               className="px-8 py-3 bg-red-600 hover:bg-red-700 text-white rounded-lg font-bold text-lg shadow-lg transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
