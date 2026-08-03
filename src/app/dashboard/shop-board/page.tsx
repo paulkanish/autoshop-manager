@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
+import JobCardModal from '@/components/JobCardModal';
 
 interface Job {
   id: string;
@@ -19,11 +20,14 @@ export default function ShopBoardPage() {
   const router = useRouter();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
-  
+
   // State for the "Waiting on Parts" prompt
   const [pendingJobId, setPendingJobId] = useState<string | null>(null);
   const [partNote, setPartNote] = useState('');
   const [noteError, setNoteError] = useState('');
+
+  // State for the Job Card Comments modal
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
 
   useEffect(() => {
     if (status === 'unauthenticated') router.push('/login');
@@ -76,7 +80,7 @@ export default function ShopBoardPage() {
       // Reset prompt state and refresh board
       setPendingJobId(null);
       setPartNote('');
-      fetchJobs(); 
+      fetchJobs();
     } catch (error: any) {
       setNoteError(error.message);
     }
@@ -109,25 +113,25 @@ export default function ShopBoardPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <KanbanColumn title="To Do" count={getJobsByStatus('SCHEDULED').length}>
             {getJobsByStatus('SCHEDULED').map((job) => (
-              <JobCard key={job.id} job={job} priorityBadge={getPriorityBadge(job.priority)} onStatusClick={handleStatusClick} />
+              <JobCard key={job.id} job={job} priorityBadge={getPriorityBadge(job.priority)} onStatusClick={handleStatusClick} onCardClick={setSelectedJobId} />
             ))}
           </KanbanColumn>
 
           <KanbanColumn title="In Progress" count={getJobsByStatus('IN_PROGRESS').length}>
             {getJobsByStatus('IN_PROGRESS').map((job) => (
-              <JobCard key={job.id} job={job} priorityBadge={getPriorityBadge(job.priority)} onStatusClick={handleStatusClick} />
+              <JobCard key={job.id} job={job} priorityBadge={getPriorityBadge(job.priority)} onStatusClick={handleStatusClick} onCardClick={setSelectedJobId} />
             ))}
           </KanbanColumn>
 
           <KanbanColumn title="Waiting on Parts" count={getJobsByStatus('WAITING_ON_PARTS').length}>
             {getJobsByStatus('WAITING_ON_PARTS').map((job) => (
-              <JobCard key={job.id} job={job} priorityBadge={getPriorityBadge(job.priority)} onStatusClick={handleStatusClick} />
+              <JobCard key={job.id} job={job} priorityBadge={getPriorityBadge(job.priority)} onStatusClick={handleStatusClick} onCardClick={setSelectedJobId} />
             ))}
           </KanbanColumn>
 
           <KanbanColumn title="Completed" count={getJobsByStatus('COMPLETED').length}>
             {getJobsByStatus('COMPLETED').map((job) => (
-              <JobCard key={job.id} job={job} priorityBadge={getPriorityBadge(job.priority)} onStatusClick={handleStatusClick} />
+              <JobCard key={job.id} job={job} priorityBadge={getPriorityBadge(job.priority)} onStatusClick={handleStatusClick} onCardClick={setSelectedJobId} />
             ))}
           </KanbanColumn>
         </div>
@@ -139,7 +143,7 @@ export default function ShopBoardPage() {
           <div className="bg-gray-800 rounded-xl border border-gray-600 p-6 max-w-md w-full shadow-2xl">
             <h3 className="text-xl font-bold text-yellow-500 mb-2">⚠️ Waiting on Parts</h3>
             <p className="text-gray-300 text-sm mb-4">Please specify which parts are needed before moving this job.</p>
-            
+
             {noteError && (
               <div className="mb-4 bg-red-500/20 border border-red-500 text-red-400 px-3 py-2 rounded text-sm">
                 {noteError}
@@ -156,13 +160,13 @@ export default function ShopBoardPage() {
             />
 
             <div className="flex gap-3 justify-end">
-              <button 
+              <button
                 onClick={() => { setPendingJobId(null); setPartNote(''); setNoteError(''); }}
                 className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition"
               >
                 Cancel
               </button>
-              <button 
+              <button
                 onClick={() => updateJobStatus(pendingJobId, 'WAITING_ON_PARTS', partNote)}
                 className="px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white font-semibold rounded-lg transition"
               >
@@ -171,6 +175,13 @@ export default function ShopBoardPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {selectedJobId && (
+        <JobCardModal
+          appointmentId={selectedJobId}
+          onClose={() => setSelectedJobId(null)}
+        />
       )}
     </div>
   );
@@ -190,31 +201,34 @@ function KanbanColumn({ title, count, children }: { title: string; count: number
   );
 }
 
-// Updated JobCard to use onStatusClick
-function JobCard({ job, priorityBadge, onStatusClick }: { job: Job; priorityBadge: string; onStatusClick: (id: string, status: string) => void }) {
-  
+// Updated JobCard to use onStatusClick and onCardClick
+function JobCard({ job, priorityBadge, onStatusClick, onCardClick }: { job: Job; priorityBadge: string; onStatusClick: (id: string, status: string) => void; onCardClick: (id: string) => void }) {
+
   const getNextStatus = () => {
     switch (job.status) {
       case 'SCHEDULED': return 'IN_PROGRESS';
-      case 'IN_PROGRESS': return 'WAITING_ON_PARTS'; 
+      case 'IN_PROGRESS': return 'WAITING_ON_PARTS';
       case 'WAITING_ON_PARTS': return 'IN_PROGRESS';
-      case 'COMPLETED': return 'SCHEDULED'; 
+      case 'COMPLETED': return 'SCHEDULED';
       default: return 'SCHEDULED';
     }
   };
 
   return (
-    <div className="bg-gray-700 rounded-lg p-4 border border-gray-600 shadow-md">
+    <div
+      className="bg-gray-700 rounded-lg p-4 border border-gray-600 shadow-md cursor-pointer"
+      onClick={() => onCardClick(job.id)}
+    >
       <div className="flex justify-between items-start mb-2">
         <span className={`text-xs font-bold px-2 py-1 rounded ${priorityBadge}`}>
           {job.priority}
         </span>
         <span className="text-xs text-gray-400">{job.vehicle.registration}</span>
       </div>
-      
+
       <h3 className="font-bold text-lg mb-1">{job.vehicle.make} {job.vehicle.model}</h3>
       <p className="text-sm text-gray-300 mb-3">{job.requestedService}</p>
-      
+
       <div className="text-xs text-gray-400 border-t border-gray-600 pt-2 mt-2 mb-4">
         <p>👤 {job.customer.firstName} {job.customer.lastName}</p>
         <p>🔧 {job.mechanic?.name || 'Unassigned'}</p>
@@ -223,16 +237,16 @@ function JobCard({ job, priorityBadge, onStatusClick }: { job: Job; priorityBadg
       <div className="flex flex-wrap gap-2">
         {job.status !== 'COMPLETED' && (
           <button
-            onClick={() => onStatusClick(job.id, getNextStatus())}
+            onClick={(e) => { e.stopPropagation(); onStatusClick(job.id, getNextStatus()); }}
             className="flex-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold py-2 px-3 rounded transition-colors"
           >
             {job.status === 'SCHEDULED' ? 'Start Job' : 'Move Next'}
           </button>
         )}
-        
+
         {job.status === 'IN_PROGRESS' && (
           <button
-            onClick={() => onStatusClick(job.id, 'COMPLETED')}
+            onClick={(e) => { e.stopPropagation(); onStatusClick(job.id, 'COMPLETED'); }}
             className="flex-1 bg-green-600 hover:bg-green-700 text-white text-xs font-semibold py-2 px-3 rounded transition-colors"
           >
             Complete
@@ -241,7 +255,7 @@ function JobCard({ job, priorityBadge, onStatusClick }: { job: Job; priorityBadg
 
         {job.status === 'WAITING_ON_PARTS' && (
           <button
-            onClick={() => onStatusClick(job.id, 'IN_PROGRESS')}
+            onClick={(e) => { e.stopPropagation(); onStatusClick(job.id, 'IN_PROGRESS'); }}
             className="flex-1 bg-yellow-600 hover:bg-yellow-700 text-white text-xs font-semibold py-2 px-3 rounded transition-colors"
           >
             Resume
