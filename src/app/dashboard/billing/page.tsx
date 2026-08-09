@@ -81,6 +81,7 @@ export default function BillingPage() {
         body: JSON.stringify({ paymentStatus: newStatus }),
       });
       if (res.ok) fetchData();
+      else alert('Failed to update status');
     } catch (err) {
       alert('Failed to update status');
     }
@@ -119,14 +120,14 @@ export default function BillingPage() {
                       <p className="text-sm text-gray-400">{job.vehicle.registration} | {job.customer.firstName} {job.customer.lastName}</p>
                     </div>
                     <p className="text-sm text-gray-300 mb-4 flex-grow">{job.requestedService}</p>
-                    
+
                     <div className="bg-gray-900 p-3 rounded-lg mb-4 text-sm space-y-1">
                       <div className="flex justify-between"><span className="text-gray-400">Labor ({job.serviceRecord.laborHours}h)</span><span>${laborTotal.toFixed(2)}</span></div>
                       <div className="flex justify-between"><span className="text-gray-400">Parts</span><span>${partsTotal.toFixed(2)}</span></div>
                       <div className="flex justify-between font-bold text-white border-t border-gray-700 pt-1 mt-1"><span>Total</span><span>${total.toFixed(2)}</span></div>
                     </div>
 
-                    <button 
+                    <button
                       onClick={() => generateInvoice(job.id)}
                       className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded-lg transition"
                     >
@@ -173,12 +174,19 @@ export default function BillingPage() {
                         </span>
                       </td>
                       <td className="p-4">
-                        {inv.paymentStatus === 'PENDING' && (
-                          <button 
+                        {inv.paymentStatus === 'PENDING' ? (
+                          <button
                             onClick={() => updateStatus(inv.id, 'PAID')}
-                            className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded transition"
+                            className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-xs font-semibold rounded transition"
                           >
                             Mark as Paid
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => updateStatus(inv.id, 'PENDING')}
+                            className="px-3 py-1 bg-yellow-600 hover:bg-yellow-700 text-white text-xs font-semibold rounded transition"
+                          >
+                            Unmark as Paid
                           </button>
                         )}
                       </td>

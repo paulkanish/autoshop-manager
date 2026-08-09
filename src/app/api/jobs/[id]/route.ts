@@ -8,41 +8,43 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  // 1. Check if user is logged in
   const session = await auth();
   if (!session || !(session.user as any)?.id) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  // 2. Await the params to get the id
   const { id } = await params;
-
-  // 3. Get the new status and optional note from the request body
   const body = await request.json();
-  const { newStatus, note } = body;
+  const { newStatus, note, completionData } = body;
 
-  // 4. Validate the status against our Prisma Enum
   if (!Object.values(JobStatus).includes(newStatus)) {
     return NextResponse.json({ error: 'Invalid status' }, { status: 400 });
   }
 
-  // 5. Enforce mandatory note for WAITING_ON_PARTS
   if (newStatus === 'WAITING_ON_PARTS' && (!note || note.trim() === '')) {
     return NextResponse.json({ error: 'A note specifying the required parts is mandatory.' }, { status: 400 });
   }
 
-  // 6. Update the appointment in the database
+  // Validate Completion Data if moving to COMPLETED
+  if (newStatus === 'COMPLETED') {
+    if (!completionData || !completionData.laborHours || !completionData.laborRate) {
+      return NextResponse.json({ error: 'Labor hours and rate are required to complete a job.' }, { status: 400 });
+    }
+    if (parseFloat(completionData.laborHours) <= 0 || parseFloat(completionData.laborRate) <= 0) {
+      return NextResponse.json({ error: 'Labor hours and rate must be greater than 0.' }, { status: 400 });
+    }
+  }
+
   try {
-    // Use a transaction to update the status and create the note simultaneously
     const result = await prisma.$transaction(async (tx) => {
-      // Update the appointment status
+      // 1. Update the appointment status
       const updatedJob = await tx.appointment.update({
         where: { id },
         data: { status: newStatus as JobStatus },
       });
 
-      // If a note was provided, create it
-      if (note && note.trim() !== '') {
+      // 2. Create the Note if moving to WAITING_ON_PARTS
+      if (note && note.trim() !== '' && newStatus === 'WAITING_ON_PARTS') {
         await tx.note.create({
           data: {
             appointmentId: id,
@@ -50,6 +52,44 @@ export async function PATCH(
             text: `STATUS CHANGE TO WAITING ON PARTS: ${note.trim()}`,
           },
         });
+      }
+
+      // 3. Create Service Record and Part Logs if moving to COMPLETED
+      if (newStatus === 'COMPLETED' && completionData) {
+        const laborHours = parseFloat(completionData.laborHours);
+        const laborRate = parseFloat(completionData.laborRate);
+        
+        // Calculate parts total safely
+        const validParts = (completionData.parts || []).filter((p: any) => p.partName && p.partName.trim() !== '');
+        const partsTotal = validParts.reduce((sum: number, p: any) => {
+          return sum + ((parseInt(p.quantity, 10) || 1) * (parseFloat(p.unitCost) || 0));
+        }, 0);
+        
+        const totalCost = (laborHours * laborRate) + partsTotal;
+
+        const serviceRecord = await tx.serviceRecord.create({
+          data: {
+            appointmentId: id,
+            mechanicId: (session.user as any).id,
+            laborHours,
+            laborRate,
+            totalCost,
+            notes: completionData.notes || null,
+            completedAt: new Date(),
+          },
+        });
+
+        // Bulk create PartLogs
+        if (validParts.length > 0) {
+          await tx.partLog.createMany({
+            data: validParts.map((p: any) => ({
+              serviceRecordId: serviceRecord.id,
+              partName: p.partName.trim(),
+              quantity: parseInt(p.quantity, 10) || 1,
+              unitCost: parseFloat(p.unitCost) || 0,
+            })),
+          });
+        }
       }
 
       return updatedJob;

@@ -29,6 +29,16 @@ export default function ShopBoardPage() {
   // State for the Job Card Comments modal
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
 
+  // State for the NEW Job Completion modal
+  const [completingJobId, setCompletingJobId] = useState<string | null>(null);
+  const [completionData, setCompletionData] = useState({
+    laborHours: '',
+    laborRate: '100', // Default shop rate
+    notes: '',
+    parts: [{ partName: '', quantity: 1, unitCost: '' }]
+  });
+  const [completionError, setCompletionError] = useState('');
+
   useEffect(() => {
     if (status === 'unauthenticated') router.push('/login');
   }, [status, router]);
@@ -52,23 +62,31 @@ export default function ShopBoardPage() {
   // Function to handle status change logic
   const handleStatusClick = (jobId: string, nextStatus: string) => {
     if (nextStatus === 'WAITING_ON_PARTS') {
-      // Open the prompt instead of updating immediately
       setPendingJobId(jobId);
       setPartNote('');
       setNoteError('');
+    } else if (nextStatus === 'COMPLETED') {
+      // Open the completion modal instead of updating immediately
+      setCompletingJobId(jobId);
+      setCompletionData({
+        laborHours: '',
+        laborRate: '100',
+        notes: '',
+        parts: [{ partName: '', quantity: 1, unitCost: '' }]
+      });
+      setCompletionError('');
     } else {
-      // For all other statuses, update immediately
       updateJobStatus(jobId, nextStatus, '');
     }
   };
 
   // Function to actually call the API
-  const updateJobStatus = async (jobId: string, newStatus: string, note: string) => {
+  const updateJobStatus = async (jobId: string, newStatus: string, note: string, completion?: any) => {
     try {
       const res = await fetch(`/api/jobs/${jobId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ newStatus, note }),
+        body: JSON.stringify({ newStatus, note, completionData: completion }),
       });
 
       const data = await res.json();
@@ -77,13 +95,52 @@ export default function ShopBoardPage() {
         throw new Error(data.error || 'Failed to update job status');
       }
 
-      // Reset prompt state and refresh board
+      // Reset all prompt states and refresh board
       setPendingJobId(null);
       setPartNote('');
+      setCompletingJobId(null);
+      setCompletionError('');
       fetchJobs();
     } catch (error: any) {
-      setNoteError(error.message);
+      if (newStatus === 'WAITING_ON_PARTS') setNoteError(error.message);
+      else if (newStatus === 'COMPLETED') setCompletionError(error.message);
+      else console.error(error);
     }
+  };
+
+  // Handlers for Completion Modal Parts List
+  const handleAddPart = () => {
+    setCompletionData(prev => ({
+      ...prev,
+      parts: [...prev.parts, { partName: '', quantity: 1, unitCost: '' }]
+    }));
+  };
+
+  const handleRemovePart = (index: number) => {
+    setCompletionData(prev => ({
+      ...prev,
+      parts: prev.parts.filter((_, i) => i !== index)
+    }));
+  };
+
+  const handlePartChange = (index: number, field: string, value: string | number) => {
+    setCompletionData(prev => {
+      const newParts = [...prev.parts];
+      newParts[index] = { ...newParts[index], [field]: value };
+      return { ...prev, parts: newParts };
+    });
+  };
+
+  const submitCompletion = () => {
+    if (!completionData.laborHours || parseFloat(completionData.laborHours) <= 0) {
+      setCompletionError('Labor hours must be greater than 0.');
+      return;
+    }
+    if (!completionData.laborRate || parseFloat(completionData.laborRate) <= 0) {
+      setCompletionError('Labor rate must be greater than 0.');
+      return;
+    }
+    updateJobStatus(completingJobId!, 'COMPLETED', '', completionData);
   };
 
   if (status === 'loading' || loading) {
@@ -177,6 +234,121 @@ export default function ShopBoardPage() {
         </div>
       )}
 
+      {/* Global Modal for Job Completion (NEW) */}
+      {completingJobId && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-gray-800 rounded-xl border border-gray-600 p-6 max-w-2xl w-full shadow-2xl my-8">
+            <h3 className="text-xl font-bold text-green-500 mb-2">✅ Complete Job & Log Details</h3>
+            <p className="text-gray-300 text-sm mb-4">Log the labor, parts, and costs before finalizing this job. This will send it to the Billing queue.</p>
+
+            {completionError && (
+              <div className="mb-4 bg-red-500/20 border border-red-500 text-red-400 px-3 py-2 rounded text-sm">
+                {completionError}
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Labor Hours</label>
+                <input
+                  type="number"
+                  step="0.5"
+                  min="0"
+                  value={completionData.laborHours}
+                  onChange={(e) => setCompletionData({...completionData, laborHours: e.target.value})}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-green-500 focus:outline-none"
+                  placeholder="e.g. 2.5"
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Labor Rate ($/hr)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={completionData.laborRate}
+                  onChange={(e) => setCompletionData({...completionData, laborRate: e.target.value})}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-green-500 focus:outline-none"
+                  placeholder="e.g. 100"
+                />
+              </div>
+            </div>
+
+            <div className="mb-4">
+              <div className="flex justify-between items-center mb-2">
+                <label className="block text-sm text-gray-400">Parts Used</label>
+                <button type="button" onClick={handleAddPart} className="text-xs text-green-400 hover:text-green-300 font-semibold">+ Add Part</button>
+              </div>
+              <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
+                {completionData.parts.map((part, index) => (
+                  <div key={index} className="grid grid-cols-12 gap-2 items-center">
+                    <input
+                      type="text"
+                      placeholder="Part Name"
+                      value={part.partName}
+                      onChange={(e) => handlePartChange(index, 'partName', e.target.value)}
+                      className="col-span-6 px-2 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-green-500"
+                    />
+                    <input
+                      type="number"
+                      placeholder="Qty"
+                      min="1"
+                      value={part.quantity}
+                      onChange={(e) => handlePartChange(index, 'quantity', e.target.value)}
+                      className="col-span-2 px-2 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-green-500"
+                    />
+                    <input
+                      type="number"
+                      placeholder="Cost"
+                      step="0.01"
+                      min="0"
+                      value={part.unitCost}
+                      onChange={(e) => handlePartChange(index, 'unitCost', e.target.value)}
+                      className="col-span-3 px-2 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-green-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleRemovePart(index)}
+                      className="col-span-1 text-red-400 hover:text-red-300 text-xl leading-none"
+                      disabled={completionData.parts.length === 1}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-sm text-gray-400 mb-1">Final Notes (Optional)</label>
+              <textarea
+                value={completionData.notes}
+                onChange={(e) => setCompletionData({...completionData, notes: e.target.value})}
+                placeholder="e.g. Replaced front brake pads and rotors. Fluid topped off."
+                className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:ring-2 focus:ring-green-500 focus:outline-none"
+                rows={2}
+              />
+            </div>
+
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => { setCompletingJobId(null); setCompletionError(''); }}
+                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={submitCompletion}
+                className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition"
+              >
+                Confirm & Complete Job
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {selectedJobId && (
         <JobCardModal
           appointmentId={selectedJobId}
@@ -201,7 +373,6 @@ function KanbanColumn({ title, count, children }: { title: string; count: number
   );
 }
 
-// Updated JobCard to use onStatusClick and onCardClick
 function JobCard({ job, priorityBadge, onStatusClick, onCardClick }: { job: Job; priorityBadge: string; onStatusClick: (id: string, status: string) => void; onCardClick: (id: string) => void }) {
 
   const getNextStatus = () => {
