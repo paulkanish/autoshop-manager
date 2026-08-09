@@ -26,6 +26,11 @@ export default function DashboardPage() {
   if (!session) return null;
 
   const user = session.user as any;
+  const userRole = user.role as 'ADMIN' | 'MECHANIC' | 'OWNER';
+
+  // PRD §2: Walk-In intake and Invoicing are Admin/Owner functions.
+  // Mechanics get Shop Board + Vehicle History only.
+  const canManageIntake = userRole === 'ADMIN' || userRole === 'OWNER';
 
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -56,7 +61,7 @@ export default function DashboardPage() {
               </p>
               <div className="flex flex-wrap justify-center lg:justify-start gap-3 text-sm">
                 <span className="px-4 py-2 bg-gray-800 rounded-lg border border-gray-600 text-gray-300">🔧 Engine Repair</span>
-                <span className="px-4 py-2 bg-gray-800 rounded-lg border border-gray-600 text-gray-300"> Battery Service</span>
+                <span className="px-4 py-2 bg-gray-800 rounded-lg border border-gray-600 text-gray-300">🔋 Battery Service</span>
                 <span className="px-4 py-2 bg-gray-800 rounded-lg border border-gray-600 text-gray-300">⚡ Electrical</span>
                 <span className="px-4 py-2 bg-gray-800 rounded-lg border border-gray-600 text-gray-300">🚗 Transmission</span>
               </div>
@@ -70,7 +75,7 @@ export default function DashboardPage() {
                 alt="Professional auto repair service at Tony Auto"
                 className="w-full h-full object-cover"
               />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent pointer-events-none" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent pointer-none" />
             </div>
 
           </div>
@@ -90,8 +95,8 @@ export default function DashboardPage() {
           </p>
         </div>
 
-        {/* Quick Actions Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
+        {/* Quick Actions Grid (role-aware) */}
+        <div className={`grid grid-cols-1 md:grid-cols-2 ${canManageIntake ? 'lg:grid-cols-4' : 'lg:grid-cols-2'} gap-6 mb-12`}>
 
           <Link href="/dashboard/shop-board" className="bg-gray-800 rounded-xl p-6 border border-gray-700 hover:border-blue-500 hover:shadow-lg hover:shadow-blue-500/10 transition-all duration-200 cursor-pointer block group">
             <div className="text-4xl mb-4">🔧</div>
@@ -99,11 +104,13 @@ export default function DashboardPage() {
             <p className="text-gray-400 text-sm">View and manage active jobs in real-time</p>
           </Link>
 
-          <Link href="/dashboard/walkin" className="bg-gray-800 rounded-xl p-6 border border-gray-700 hover:border-red-500 hover:shadow-lg hover:shadow-red-500/10 transition-all duration-200 cursor-pointer block group">
-            <div className="text-4xl mb-4">🚶</div>
-            <h3 className="text-xl font-semibold mb-2 text-white group-hover:text-red-400 transition-colors">New Walk-In</h3>
-            <p className="text-gray-400 text-sm">Fast registration for unscheduled arrivals</p>
-          </Link>
+          {canManageIntake && (
+            <Link href="/dashboard/walkin" className="bg-gray-800 rounded-xl p-6 border border-gray-700 hover:border-red-500 hover:shadow-lg hover:shadow-red-500/10 transition-all duration-200 cursor-pointer block group">
+              <div className="text-4xl mb-4">🚶</div>
+              <h3 className="text-xl font-semibold mb-2 text-white group-hover:text-red-400 transition-colors">New Walk-In</h3>
+              <p className="text-gray-400 text-sm">Fast registration for unscheduled arrivals</p>
+            </Link>
+          )}
 
           <Link href="/dashboard/vehicle-history" className="bg-gray-800 rounded-xl p-6 border border-gray-700 hover:border-yellow-500 hover:shadow-lg hover:shadow-yellow-500/10 transition-all duration-200 cursor-pointer block group">
             <div className="text-4xl mb-4">🔍</div>
@@ -111,11 +118,13 @@ export default function DashboardPage() {
             <p className="text-gray-400 text-sm">Search vehicles & view past services</p>
           </Link>
 
-          <Link href="/dashboard/billing" className="bg-gray-800 rounded-xl p-6 border border-gray-700 hover:border-green-500 hover:shadow-lg hover:shadow-green-500/10 transition-all duration-200 cursor-pointer block group">
-            <div className="text-4xl mb-4">💰</div>
-            <h3 className="text-xl font-semibold mb-2 text-white group-hover:text-green-400 transition-colors">Invoicing & Billing</h3>
-            <p className="text-gray-400 text-sm">Generate invoices and track payments</p>
-          </Link>
+          {canManageIntake && (
+            <Link href="/dashboard/billing" className="bg-gray-800 rounded-xl p-6 border border-gray-700 hover:border-green-500 hover:shadow-lg hover:shadow-green-500/10 transition-all duration-200 cursor-pointer block group">
+              <div className="text-4xl mb-4">💰</div>
+              <h3 className="text-xl font-semibold mb-2 text-white group-hover:text-green-400 transition-colors">Invoicing & Billing</h3>
+              <p className="text-gray-400 text-sm">Generate invoices and track payments</p>
+            </Link>
+          )}
 
         </div>
 
